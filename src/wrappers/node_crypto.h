@@ -21,6 +21,14 @@
 
 #include "jx/extend.h"
 
+// TLS-PSK support requires OpenSSL v1.0.0 or later built with PSK enabled
+#if OPENSSL_VERSION_NUMBER >= 0x10000000L
+#ifndef OPENSSL_NO_PSK
+#define OPENSSL_PSK_SUPPORT
+#endif
+#endif
+
+
 #define EVP_F_EVP_DECRYPTFINAL 101
 
 namespace node {
@@ -56,6 +64,9 @@ class SecureContext : ObjectWrap {
   static DEFINE_JS_METHOD(SetSessionIdContext);
   static DEFINE_JS_METHOD(Close);
   static DEFINE_JS_METHOD(LoadPKCS12);
+  static DEFINE_JS_METHOD(SetPskHint);
+  static DEFINE_JS_METHOD(SetPskServerCallback);
+
 
   static SSL_SESSION* GetSessionCallback(SSL* s, unsigned char* key, int len,
                                          int* copy);
@@ -85,6 +96,11 @@ class SecureContext : ObjectWrap {
 
   ~SecureContext() { FreeCTXMem(); }
 
+ private:
+#ifdef OPENSSL_PSK_SUPPORT
+  JS_PERSISTENT_FUNCTION(psk_server_cb_);
+#endif
+
   INIT_NAMED_CLASS_MEMBERS(SecureContext, SecureContext) {
     NODE_SET_PROTOTYPE_METHOD(constructor, "init", SecureContext::Init);
     NODE_SET_PROTOTYPE_METHOD(constructor, "setKey", SecureContext::SetKey);
@@ -106,8 +122,21 @@ class SecureContext : ObjectWrap {
 
     JS_NEW_PERSISTENT_FUNCTION_TEMPLATE(com->secure_context_constructor,
                                         constructor);
+
+#ifdef OPENSSL_PSK_SUPPORT
+    NODE_SET_PROTOTYPE_METHOD(constructor, "setPskHint", SecureContext::SetPskHint);
+    NODE_SET_PROTOTYPE_METHOD(constructor, "setPskServerCallback", SecureContext::SetPskServerCallback);
+#endif
+
   }
   END_INIT_NAMED_MEMBERS(SecureContext)
+
+
+#ifdef OPENSSL_PSK_SUPPORT
+    static unsigned int PskServerCallback_(SSL *ssl, const char *identity,
+      unsigned char *psk, unsigned int max_psk_len);
+#endif
+
 };
 
 class ClientHelloParser {
@@ -210,6 +239,12 @@ class Connection : ObjectWrap {
   static int SelectSNIContextCallback_(SSL* s, int* ad, void* arg);
 #endif
 
+#ifdef OPENSSL_PSK_SUPPORT
+  static DEFINE_JS_METHOD(SetPskClientCallback);
+  static unsigned int PskClientCallback_(SSL *ssl, const char *hint, char *identity, unsigned int max_identity_len, unsigned char *psk, unsigned int max_psk_len);
+  JS_PERSISTENT_FUNCTION(psk_client_cb_);
+#endif
+
   int HandleBIOError(BIO* bio, const char* func, int rv);
 
   enum ZeroStatus { kZeroIsNotAnError, kZeroIsAnError };
@@ -268,6 +303,7 @@ class Connection : ObjectWrap {
   bool is_server_; /* coverity[member_decl] */
   SSL_SESSION* next_sess_;
 
+
   friend class ClientHelloParser;
   friend class SecureContext;
 
@@ -312,6 +348,10 @@ class Connection : ObjectWrap {
                               Connection::GetServername);
     NODE_SET_PROTOTYPE_METHOD(constructor, "setSNICallback",
                               Connection::SetSNICallback);
+#endif
+
+#ifdef OPENSSL_PSK_SUPPORT
+    NODE_SET_PROTOTYPE_METHOD(constructor, "setPskClientCallback", Connection::SetPskClientCallback);
 #endif
   }
   END_INIT_NAMED_MEMBERS(Connection)
