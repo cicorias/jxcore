@@ -28,5 +28,6 @@ NODE_EXT_LIST_ITEM(node_fs_event_wrap)
 NODE_EXT_LIST_ITEM(node_signal_wrap)
 
 NODE_EXT_LIST_ITEM(node_crypto_extension_wrap)
+NODE_EXT_LIST_ITEM(node_crypto_extension_wrap2)
 
 NODE_EXT_LIST_END
